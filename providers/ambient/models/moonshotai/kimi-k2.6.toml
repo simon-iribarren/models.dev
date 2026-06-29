@@ -1,5 +1,10 @@
-[extends]
-from = "moonshotai/kimi-k2.6"
+# Ambient documents no toggle, effort, or budget field for this model; reasoning
+# output does not itself establish a control. https://docs.ambient.xyz
+reasoning_options = []
+base_model = "moonshotai/kimi-k2.6"
+
+[interleaved]
+field = "reasoning_content"
 
 [cost]
 input = 0.95
@@ -7,10 +12,5 @@ output = 4
 cache_read = 0.2
 cache_write = 0
 
-[limit]
-context = 262144
-output = 262144
-
 [modalities]
 input = ["text", "image"]
-output = ["text"]

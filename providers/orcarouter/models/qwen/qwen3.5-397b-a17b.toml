@@ -1,5 +1,5 @@
-[extends]
-from = "alibaba/qwen3.5-397b-a17b"
+base_model = "alibaba/qwen3.5-397b-a17b"
+reasoning_options = []
 
 [cost]
 input = 0.172

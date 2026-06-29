@@ -1,2 +1,10 @@
-[extends]
-from = "alibaba/qwen3-32b"
+base_model = "alibaba/qwen3-32b"
+reasoning_options = []
+
+[cost]
+input = 0.1
+output = 0.3
+reasoning = 8.4
+
+[limit]
+context = 32_768

@@ -27,10 +27,11 @@ Sync runs also write `.sync/model-sync-report.md` for the automation workflow PR
 
 - Reads existing TOML files from the provider `modelsDir`.
 - Parses existing files with `Bun.TOML.parse` and `AuthoredModelShape.partial()`.
+- Resolves existing `base_model` / `base_model_omit` metadata before passing local metadata to provider modules.
 - Calls the provider module to fetch, parse, and translate source models.
 - Validates translated models with `AuthoredModel` before writing.
 - Formats TOML consistently for all synced providers.
-- Compares semantic model data before writing to avoid formatting-only churn.
+- Compares authored TOML shapes before writing so existing factored TOMLs stay factored instead of being expanded.
 - Replaces symlinked files safely by removing the symlink before writing.
 - Removes existing files that are no longer present in the desired synced set.
 - Writes `.sync/model-sync-report.md` for GitHub Actions.
@@ -68,9 +69,12 @@ Keep provider modules focused on provider-specific logic:
 - Convert provider pricing units to per-1M-token catalog prices.
 - Convert dates, modalities, limits, capabilities, and model IDs into catalog fields.
 - Preserve existing hand-authored fields only when the provider API is not authoritative for that field.
+- Preserve `base_model` and `base_model_omit` from existing TOMLs when updating a factored provider model.
 - Return `undefined` from `translateModel` only when skipped source models should be treated as absent from the synced catalog.
 
 Do not put TOML scanning, writing, deletion, reporting, or generic comparison logic in provider modules.
+
+Provider sync code must use `base_model` and `base_model_omit`; do not write legacy `[extends]` tables. If a sync or generator updates a provider file that already uses `base_model`, it should keep that pointer and only write provider-specific overrides.
 
 ## Adding A Provider
 
@@ -101,7 +105,7 @@ The workflow:
 - Creates or updates a provider-specific sync PR only when `providers` changed.
 - Uses `.sync/model-sync-report.md` as the PR body.
 
-Each provider job checks out `dev` and writes to a fixed provider branch like `automation/sync-models-openrouter`. If that provider's sync PR is already open, later scheduled runs force-update the same branch and edit the existing PR instead of creating another one. Provider jobs do not share unmerged changes with each other; OpenRouter only extends from canonical provider TOMLs already present on `dev`.
+Each provider job checks out `dev` and writes to a fixed provider branch like `automation/sync-models-openrouter`. If that provider's sync PR is already open, later scheduled runs force-update the same branch and edit the existing PR instead of creating another one. Provider jobs do not share unmerged changes with each other; OpenRouter only uses `base_model` for model metadata entries already present on `dev`.
 
 CI automatically picks up providers registered in `providers` in `packages/core/src/sync/index.ts`. Adding a new sync provider there is enough to get an hourly provider-specific sync job, branch, labels, title, and PR naming convention. The workflow only needs manual updates when a new provider requires new secrets or other environment variables.
 
@@ -117,6 +121,7 @@ OpenRouter is implemented in `packages/core/src/sync/providers/openrouter.ts`.
 - API prices are per-token strings and are converted to per-1M-token numbers.
 - `structured_output` comes from `supported_parameters.includes("structured_outputs")` only.
 - Existing `status`, `interleaved`, `knowledge`, `limit.input`, and `cost.tiers` may be preserved when OpenRouter is not authoritative enough for those fields.
+- Canonical OpenRouter model IDs should emit `base_model` references to model metadata when a matching `models/` entry exists.
 
 ## Cloudflare Workers AI Notes
 
@@ -159,6 +164,7 @@ OVHcloud AI Endpoints is implemented in `packages/core/src/sync/providers/ovhclo
 - Model IDs are lowercased from the catalog `id` to match the existing TOML paths under `providers/ovhcloud/models`.
 - API prices are per-token strings and are converted to per-1M-token numbers; free models (price `0`) get no `[cost]` section.
 - `reasoning`, `tool_call`, and `structured_output` come from `supported_features`; `temperature` comes from `supported_sampling_parameters`.
+- Authored `reasoning_options` are preserved for reasoning models. `Qwen3-32B` supports toggling reasoning through OVHcloud's documented `/no_think` prompt control. Both gpt-oss models support `low`, `medium`, and `high` reasoning effort. The Qwen3.5 models support `none`, `low`, `medium`, and `high`; Qwen3.6-27B additionally supports `minimal`.
 - `attachment` is derived from non-text `input_modalities`, and `open_weights` from the presence of `hugging_face_id`.
 - `release_date`/`last_updated` default to the catalog `created` timestamp but preserve any existing hand-authored dates; `knowledge`, `family`, `status`, `interleaved`, and `limit.input` are preserved when present.
 
@@ -167,3 +173,30 @@ OVHcloud AI Endpoints is implemented in `packages/core/src/sync/providers/ovhclo
 Vercel is intentionally not wired into `bun models:sync` right now. Keep using the existing `vercel:generate` script until Vercel sync behavior is redesigned and reviewed separately.
 
 Do not add Vercel model changes to OpenRouter sync PRs.
+
+## Chutes Notes
+
+Chutes is implemented in `packages/core/src/sync/providers/chutes.ts`.
+
+- Run it with `bun models:sync chutes` or `bun chutes:sync`.
+- Source endpoint: `https://llm.chutes.ai/v1/models`; no auth required (the model list is public).
+- Model IDs map directly to TOML paths under `providers/chutes/models`.
+- `reasoning`, `tool_call`, and `structured_output` come from `supported_features`; `temperature` comes from `supported_sampling_parameters`.
+- `reasoning_options` is always an empty array: the API advertises a `reasoning` capability but exposes no toggle or effort parameter, so there is no provider evidence for a reasoning option.
+- TEE model IDs emit `base_model` references to matching `models/` metadata; checkpoints without a canonical entry (e.g. `Qwen3-235B-A22B-Thinking-2507`, `DeepSeek-V3.2`) are written inline.
+- `attachment` is derived from non-text `input_modalities`, and all models are `open_weights`.
+- `release_date`/`last_updated` default to the API `created` timestamp but preserve existing hand-authored dates; `knowledge`, `family`, `status`, `interleaved`, and `limit.input` are preserved when present.
+
+## Venice Notes
+
+Venice is implemented in `packages/core/src/sync/providers/venice.ts`.
+
+- Run it with `bun models:sync venice` or `bun venice:sync`.
+- `VENICE_API_KEY` is optional locally and includes models visible to that account when set.
+- Models missing from the API response are removed from the Venice catalog.
+- Every Venice model uses `base_model`; flattened IDs are matched to provider-agnostic metadata before provider-specific overrides are written.
+- Every Venice model declares `reasoning_options`; models without API-provided effort levels use an empty array.
+
+## Standalone Generators
+
+Some provider scripts in `packages/core/script/generate-*.ts` are not wired into `bun models:sync`. When updating those scripts, preserve existing `base_model` and `base_model_omit` fields for generated TOMLs that already use model metadata inheritance. New inheritance-aware output should use `base_model`; do not reintroduce legacy `[extends]` syntax.

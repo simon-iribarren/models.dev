@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { ExistingModel, SyncedFullModel, SyncProvider, SyncedModel } from "../index.js";
+import type { ExistingModel, SyncProvider, SyncedModel } from "../index.js";
 
 const API_ENDPOINT = "https://catalog.endpoints.ai.ovh.net/rest/v2/openrouter";
 
@@ -113,12 +113,15 @@ export function buildOvhcloudModel(
       : undefined;
 
   return {
+    base_model: existing?.base_model,
+    base_model_omit: existing?.base_model_omit,
     name: model.name,
     family: existing?.family,
     release_date: releaseDate,
     last_updated: lastUpdated,
     attachment,
     reasoning,
+    reasoning_options: reasoning ? existing?.reasoning_options : undefined,
     temperature: temperature || undefined,
     tool_call: toolCall,
     structured_output: structuredOutput || undefined,
@@ -133,5 +136,5 @@ export function buildOvhcloudModel(
       output: model.max_output_length ?? existing?.limit?.output ?? model.context_length,
     },
     modalities: { input, output },
-  } satisfies SyncedFullModel;
+  } satisfies SyncedModel;
 }

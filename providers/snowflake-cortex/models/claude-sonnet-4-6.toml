@@ -1,7 +1,6 @@
-[extends]
-from = "anthropic/claude-sonnet-4-6"
-omit = ["cost"]
+base_model = "anthropic/claude-sonnet-4-6"
+
+reasoning_options = [{ type = "budget_tokens" }]
 
 [limit]
-context = 1_000_000
 output = 16_384

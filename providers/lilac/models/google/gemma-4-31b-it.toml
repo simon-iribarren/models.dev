@@ -1,9 +1,9 @@
-name = "Gemma 4 31B IT"
-attachment = true
+# $.chat_template_kwargs.enable_thinking = true|false; default false. The
+# template ignores $.chat_template_kwargs.thinking when sent alone.
+# https://docs.getlilac.com/inference/chat-completions#reasoning (accessed 2026-06-25)
+reasoning_options = [{ type = "toggle" }]
+base_model = "google/gemma-4-31b-it"
 knowledge = "2025-01"
-
-[extends]
-from = "google/gemma-4-31b-it"
 
 [interleaved]
 field = "reasoning_content"
@@ -18,4 +18,3 @@ output = 262_100
 
 [modalities]
 input = ["text", "image", "video"]
-output = ["text"]
